@@ -12,6 +12,10 @@ from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import StandardScaler
+
+#curva AUC
+from sklearn.metrics import roc_curve, roc_auc_score
 
 
 #create dataset
@@ -22,7 +26,10 @@ y = dataset["Y"]
 
 #tunign KNN
 def tuning_KNN(x,y):
-    #Criacao do grid para o KNN
+    #Criacao do grid para o MLP
+    scaler = StandardScaler()
+    x = scaler.fit_transform(x)
+    
     valores_n_neighbors = np.array([4, 5, 6])
     valores_weights = np.array(['uniform', 'distance'])
     valores_p = np.array([1, 2])
@@ -94,7 +101,7 @@ def tuning_MLP(x,y):
                     'batch_size': valores_batch_size}
     
     #chamando o modelo
-    modelo = MLPClassifier(max_iter = 1, tol= 0.000010, random_state=0)
+    modelo = MLPClassifier(max_iter = 4000, tol= 0.000010, random_state=0)
     #Criando os grids
     gridSVM = GridSearchCV(estimator = modelo, param_grid = valores_grid, cv=2, n_jobs=-1)
     gridSVM.fit(x,y)
@@ -119,30 +126,36 @@ def evaluate_model(x, y, model):
 results_knn=list()
 results_svm=list()
 results_mlp=list()
+
 accuracy_predict_KNN=list()
 accuracy_predict_SVC=list()
+accuracy_predict_MLP=list()
 
 for seed in range(1, 31):
     
     #Divisão da base em treino e teste (20%)
     x_treino, x_teste, y_treino, y_teste = train_test_split(X, y, test_size=0.2, shuffle=True, random_state=seed)
     
-    #normalização do x_treino
+    #normalização do x_treino e x_teste
     normalizador = MinMaxScaler(feature_range = (0, 1))
     x_treino_norm = normalizador.fit_transform(x_treino)
-    
-    #normalizacao do x_teste
     x_teste_norm = normalizador.fit_transform(x_teste)
-
+    
+    
+    #Standard Scale do x_treino e x_teste para o MLP
+    scaler = StandardScaler()
+    x_treino_stand = scaler.fit_transform(x_treino)
+    x_teste_stand = scaler.fit_transform(x_teste)
+    
     #chamando o tuning do KNN
     n, w, p, m = tuning_KNN(x_treino_norm, y_treino)
     c, k, d, g = tuning_SVM(x_treino_norm, y_treino)
-#    h, a, s, b = tuning_MLP(x_treino_norm, y_treino)
+    h, a, s, b = tuning_MLP(x_treino_stand, y_treino)
 
     # create model com os parametros tunados
     KNN_model = KNeighborsClassifier(n_neighbors=n, weights=w, p=p, metric=m)
     SVC_model = SVC(C=c, kernel=k, degree=d, gamma=g, random_state=0) 
-    MLP_Model = MLPClassifier(verbose = True, max_iter = 1000,
+    MLP_Model = MLPClassifier(verbose = True, max_iter = 4000,
                                         tol= 0.000010, 
                                         hidden_layer_sizes=h,
                                         solver=s,
@@ -153,11 +166,11 @@ for seed in range(1, 31):
     # preparar o modelo para ser validado no kfold
     scores_knn = evaluate_model(x_treino_norm, y_treino, KNN_model)
     scores_svm = evaluate_model(x_treino_norm, y_treino, SVC_model)
-#   scores_mlp = evaluate_model(x_treino_norm, y_treino, MLP_Model)
+    scores_mlp = evaluate_model(x_treino_stand, y_treino, MLP_Model)
     #print('>%d mean=%.4f se=%.3f' % (seed, mean(scores_knn), sem(scores_knn)))
     results_knn.append(mean(scores_knn))
     results_svm.append(mean(scores_svm))
-#   results_mlp.append(mean(scores_mlp))
+    results_mlp.append(mean(scores_mlp))
     
     #Make predictions
     KNN_model.fit(x_treino_norm, y_treino)
@@ -167,6 +180,10 @@ for seed in range(1, 31):
     SVC_model.fit(x_treino_norm, y_treino)
     predict = SVC_model.predict(x_teste_norm)
     accuracy_predict_SVC.append(accuracy_score(y_teste, predict) * 100)
+    
+    MLP_Model.fit(x_treino_stand, y_treino)
+    predict = SVC_model.predict(x_teste_stand)
+    accuracy_predict_MLP.append(accuracy_score(y_teste, predict) * 100)
   
     
 #print("Media da acurácia do KNN: {:.2f}%."..format(mean(results_knn)))
@@ -174,9 +191,11 @@ print ("Média da acurácia do KNN nos dadaos de treino {:.2f}%.".format(mean(re
 print("Media do desvio padrao do KNN: ", np.std(results_knn))
 print ("Média da acurácia do SVM nos dadaos de treino {:.2f}%.".format(mean(results_svm)*100))
 print("Media do desvio padrao do SVM: ", np.std(results_svm))
-#print ("Média da acurácia do MLP nos dadaos de treino {:.2f}%.".format(mean(results_mlp)*100))
-#print("Media do desvio padrao do MLP: ", np.std(results_mlp))
+print ("Média da acurácia do MLP nos dadaos de treino {:.2f}%.".format(mean(results_mlp)*100))
+print("Media do desvio padrao do MLP: ", np.std(results_mlp))
 
+print("--------------------------------------------------------------")
 print ("A acurácia da predição do KNN foi de {:.2f}%.".format(mean(accuracy_predict_KNN)))
 print ("A acurácia da predição do SVM foi de {:.2f}%.".format(mean(accuracy_predict_SVC)))
+print ("A acurácia da predição do MLP foi de {:.2f}%.".format(mean(accuracy_predict_MLP)))
 
